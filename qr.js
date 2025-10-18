@@ -59,7 +59,7 @@ router.get('/', async (req, res) => {
                                    let b64data = Buffer.from(data).toString('base64');
                                    let session = await client.sendMessage(client.user.id, { text: 'dave~' + b64data });
 
-let Textt = `┏━━━❑\n┃🔹 Owner: dave\n┃🔹 Type: Base64\n┃🔹 Status: Active\n┗━━━❒`
+let Textt = `┏━━━❑\n┃🔹 Owner: maka\n┃🔹 Type: Base64\n┃🔹 Status: Active\n┗━━━❒`
 
                         await client.sendMessage(client.user.id,{ text: Textt }, {quoted: session })
 
