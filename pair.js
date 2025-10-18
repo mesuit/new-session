@@ -65,8 +65,9 @@ router.get('/', async (req, res) => {
                     await client.sendMessage(client.user.id, {text: `
 ╔════════════════════
 ║ ◇ SESSION CONNECTED ◇
-║ 🕳️ BOT: 𝘿𝙖𝙫𝙚𝘼𝙄
+║ 🕳️ BOT: Makamesco Md
 ║ 🕳️ TYPE: BASE64
+boost followers :https://makamescodigitalsolutions.com/
 ╚════════════════════` }, { quoted: session });
 
                     await delay(100);
