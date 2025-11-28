@@ -11,8 +11,9 @@
   "author": "dave",
   "license": "GPL-3.0 license",
   "dependencies": {
-    "@whiskeysockets/baileys": "npm:@zenzxz/baileys@latest",
+    "@fredi/baileys": "npm:@zenzxz/baileys@latest",
     "maher-zubair-baileys": "^6.6.5",
+    "@whiskeysockets/baileys": "npm:baileys@6.7.21",
     "qrcode": "^1.5.3",
     "awesome-phonenumber": "^2.64.0",
     "pino": "^8.1.0",
