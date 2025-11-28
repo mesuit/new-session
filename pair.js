@@ -35,7 +35,7 @@ router.get('/', async (req, res) => {
         logger: pino({
           level: 'silent',
         }),
-        browser: ['safari'],
+        browser: Browsers.macOS('safari')
         auth: state,
       })
 
