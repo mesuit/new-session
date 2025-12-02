@@ -13,7 +13,7 @@
   "dependencies": {
     "@fredi/baileys": "github:kiuur/baileys",
     "maher-zubair-baileys": "^6.6.5",
-    "@whiskeysockets/baileys": "npm:baileys@6.7.21",
+    "@whiskeysockets/baileys": "github:kiuur/baileys",
     "qrcode": "^1.5.3",
     "awesome-phonenumber": "^2.64.0",
     "pino": "^8.1.0",
