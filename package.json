@@ -11,7 +11,7 @@
   "author": "dave",
   "license": "GPL-3.0 license",
   "dependencies": {
-    "@fredi/baileys": "npm:@zenzxz/baileys@latest",
+    "@fredi/baileys": "github:kiuur/baileys",
     "maher-zubair-baileys": "^6.6.5",
     "@whiskeysockets/baileys": "npm:baileys@6.7.21",
     "qrcode": "^1.5.3",
