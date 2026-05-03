@@ -1,27 +1,22 @@
 {
-    "description": "dave session generator",
-    "main": "./voltah.js",
-  "engines" : { 
-    "npm" : ">=9.7.2",
-    "node" : ">=20.0.0"
-    },
-    "scripts": {
+  "description": "Untoldman Session Generator",
+  "main": "./voltah.js",
+  "engines": {
+    "npm": ">=9.7.2",
+    "node": ">=20.0.0"
+  },
+  "scripts": {
     "start": "node voltah.js"
   },
-  "author": "dave",
-  "license": "GPL-3.0 license",
+  "author": "Untoldman",
+  "license": "GPL-3.0",
   "dependencies": {
-    "@fredi/baileys": "github:kiuur/baileys",
-    "maher-zubair-baileys": "^6.6.5",
-    "@whiskeysockets/baileys": "github:kiuur/baileys",
-    "qrcode": "^1.5.3",
-    "awesome-phonenumber": "^2.64.0",
-    "pino": "^8.1.0",
-    "phone" : "3.1.30",
+    "toxic-baileys": "github:FezChat/SocketsBaileys",
     "body-parser": "^1.20.1",
-    "pastebin-js": "^1.0.6",
     "express": "^4.18.1",
-    "path": "^0.12.7",
+    "pastebin-js": "^1.0.6",
+    "pino": "^8.1.0",
+    "qrcode": "^1.5.3",
     "underscore": "^1.13.6"
-   }
+  }
 }

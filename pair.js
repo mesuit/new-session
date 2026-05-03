@@ -1,5 +1,3 @@
-const PastebinAPI = require('pastebin-js');
-const pastebin = new PastebinAPI('EMWTMkQAVfJa9kM-MRUrxd5Oku1U7pgL');
 const { makeid } = require('./id');
 const express = require('express');
 const fs = require('fs');
@@ -10,75 +8,83 @@ const {
     fetchLatestBaileysVersion,
     delay,
     makeCacheableSignalKeyStore,
-} = require("@whiskeysockets/baileys");
+} = require("toxic-baileys");
 
 const router = express.Router();
 
-// Helper function to remove files
 function removeFile(filePath) {
     if (!fs.existsSync(filePath)) return false;
     fs.rmSync(filePath, { recursive: true, force: true });
 }
 
-// Route handler
 router.get('/', async (req, res) => {
     const id = makeid();
     let num = req.query.number;
 
+    if (!num) {
+        return res.json({ code: 'Phone number is required' });
+    }
+
+    num = num.replace(/[^0-9]/g, '');
+
     async function RAVEN() {
-        const { version } = await fetchLatestBaileysVersion();
         const { state, saveCreds } = await useMultiFileAuthState('./temp/' + id);
+        const { version } = await fetchLatestBaileysVersion();
+
         try {
-      const client = makeWASocket({
-        printQRInTerminal: false,
-        version,
-        logger: pino({
-          level: 'silent',
-        }),
-        browser: ['Ubunti', 'Chrome', '20.0.04'],
-        auth: state,
-      })
+            const client = makeWASocket({
+                auth: {
+                    creds: state.creds,
+                    keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
+                },
+                printQRInTerminal: false,
+                version,
+                logger: pino({ level: 'silent' }),
+                browser: ['Ubuntu', 'Chrome', '22.0.0'],
+                markOnlineOnConnect: false,
+            });
 
             if (!client.authState.creds.registered) {
                 await delay(1500);
-                num = num.replace(/[^0-9]/g, '');
                 const code = await client.requestPairingCode(num);
-
-                 if (!res.headersSent) {
+                if (!res.headersSent) {
                     await res.send({ code });
                 }
             }
 
             client.ev.on('creds.update', saveCreds);
+
             client.ev.on('connection.update', async (s) => {
                 const { connection, lastDisconnect } = s;
+
                 if (connection === 'open') {
-                await client.sendMessage(client.user.id, { text: `Generating your session_id, Wait . .` });
-                    await delay(6000);
+                    await delay(3000);
+                    try {
+                        const data = fs.readFileSync(`${__dirname}/temp/${id}/creds.json`);
+                        const b64data = Buffer.from(data).toString('base64');
 
-                    const data = fs.readFileSync(__dirname + `/temp/${id}/creds.json`);
-                    await delay(5000);
-                    const b64data = Buffer.from(data).toString('base64');
-                    const session = await client.sendMessage(client.user.id, { text: b64data });
+                        const session = await client.sendMessage(client.user.id, { text: b64data });
 
-                    // Send message after session
-                    await client.sendMessage(client.user.id, {text: `
-╔════════════════════
-║ ◇ SESSION CONNECTED ◇
-║ 🕳️ BOT: Untoldman😎
-║ 🕳️ TYPE: BASE64
-╚════════════════════` }, { quoted: session });
+                        await client.sendMessage(client.user.id, {
+                            text: `╔════════════════════\n║ ◇ SESSION CONNECTED ◇\n║ 🕳️ BOT: Untoldman😎\n║ 🕳️ TYPE: BASE64\n╚════════════════════`
+                        }, { quoted: session });
 
-                    await delay(100);
+                    } catch (e) {
+                        console.log('Error sending session:', e);
+                    }
+
+                    await delay(500);
                     await client.ws.close();
                     removeFile('./temp/' + id);
-                } else if (connection === 'close' && lastDisconnect && lastDisconnect.error && lastDisconnect.error.output.statusCode !== 401) {
+
+                } else if (connection === 'close' && lastDisconnect?.error?.output?.statusCode !== 401) {
                     await delay(10000);
                     RAVEN();
                 }
             });
+
         } catch (err) {
-            console.log('service restarted', err);
+            console.log('Pair service error:', err);
             removeFile('./temp/' + id);
             if (!res.headersSent) {
                 await res.send({ code: 'Service Currently Unavailable' });
