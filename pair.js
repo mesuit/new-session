@@ -8,7 +8,7 @@ const {
     fetchLatestBaileysVersion,
     delay,
     makeCacheableSignalKeyStore,
-} = require("toxic-baileys");
+} = require("whiskeysockets/baileys");
 
 const router = express.Router();
 
