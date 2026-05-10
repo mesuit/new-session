@@ -11,7 +11,7 @@ const {
     delay,
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
-} = require("toxic-baileys");
+} = require("whiskeysockets/baileys");
 
 function removeFile(FilePath) {
     if (!fs.existsSync(FilePath)) return false;
