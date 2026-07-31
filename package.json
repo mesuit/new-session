@@ -1,5 +1,5 @@
 {
-  "description": "Untoldman Session Generator",
+  "description": "Makamesco Session Generator",
   "main": "./voltah.js",
   "engines": {
     "npm": ">=9.7.2",
@@ -8,15 +8,19 @@
   "scripts": {
     "start": "node voltah.js"
   },
-  "author": "Untoldman",
+  "author": "Makamesco",
   "license": "GPL-3.0",
   "dependencies": {
     "toxic-baileys": "github:FezChat/SocketsBaileys",
     "body-parser": "^1.20.1",
     "express": "^4.18.1",
-    "pastebin-js": "^1.0.6",
     "pino": "^8.1.0",
     "qrcode": "^1.5.3",
-    "underscore": "^1.13.6"
+    "ws": "^8.18.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "protobufjs": "^7.5.5"
+    }
   }
 }
