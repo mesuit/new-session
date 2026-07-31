@@ -107,7 +107,7 @@ async function performPostConnectionActions(session) {
 
     // Deliver credentials to the user's own WhatsApp DM
     try {
-      const creds = `MAKAMESCO:~${session.credentialsBase64}`;
+      const creds = session.credentialsBase64;
       let rawJid = sock.user?.id;
 
       if (!rawJid) {
