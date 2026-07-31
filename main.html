@@ -717,7 +717,8 @@
           if (msg.data.status) state.wsData.status = msg.data.status;
           if (msg.data.pairingCode) state.wsData.pairingCode = msg.data.pairingCode;
           if (msg.data.qrCode) state.wsData.qrCode = msg.data.qrCode;
-          if (msg.data.credentialsBase64 !== undefined) state.wsData.credentialsBase64 = msg.data.credentialsBase64;
+          // Only update credentials if the incoming value is non-empty (never clear once set)
+          if (msg.data.credentialsBase64) state.wsData.credentialsBase64 = msg.data.credentialsBase64;
         }
         if (msg.event === 'pairing_code') state.wsData.pairingCode = msg.data.code;
         if (msg.event === 'qr') state.wsData.qrCode = msg.data.qrCode;
@@ -767,20 +768,25 @@
         </div>`;
     }
 
-    // Credentials
-    if (status === 'connected' && credentialsBase64) {
+    // Credentials — show when connected OR terminated (session closed after delivery)
+    if (credentialsBase64 && (status === 'connected' || status === 'terminated')) {
+      const escaped = credentialsBase64.replace(/'/g, "\\'");
       html += `
         <div class="field-row">
           <div class="creds-header">
             <label class="field-label" style="margin:0">Session Credentials (Base64)</label>
-            <button class="btn-copy-creds" onclick="copyText('${credentialsBase64}', 'creds-copy-icon')">
+            <button class="btn-copy-creds" onclick="copyText('${escaped}', 'creds-copy-icon')">
               <i class="far fa-copy" id="creds-copy-icon"></i> Copy Session
             </button>
           </div>
-          <div class="creds-box" onclick="copyText('${credentialsBase64}', 'creds-copy-icon')">
+          <div class="creds-box" onclick="copyText('${escaped}', 'creds-copy-icon')">
             <code id="creds-text">${credentialsBase64.slice(0, 120)}...</code>
           </div>
-          <p class="hint" style="margin-top:0.5rem">Session generated successfully. Copy and keep it private.</p>
+          <p class="hint" style="margin-top:0.5rem">
+            ${status === 'terminated'
+              ? '✅ Session delivered. Copy your credentials — they were also sent to your WhatsApp DM.'
+              : 'Session generated successfully. Copy and keep it private.'}
+          </p>
         </div>`;
     }
 

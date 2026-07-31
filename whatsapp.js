@@ -146,7 +146,11 @@ async function performPostConnectionActions(session) {
     // Disconnect and clean up after delivery
     await new Promise((r) => setTimeout(r, 4000));
     session.status = 'terminated';
-    notifyListeners(session, 'status', { status: 'terminated' });
+    // Send credentials along with terminated so UI can still display them
+    notifyListeners(session, 'status', {
+      status: 'terminated',
+      credentialsBase64: session.credentialsBase64,
+    });
     try { sock.end(undefined); } catch (_) {}
     cleanupAuthDir(session.sessionId);
     activeSessions.delete(session.sessionId);
