@@ -9,6 +9,9 @@ const logger = pino({ level: 'warn' });
 function loadBaileys() {
   const mod = require('@whiskeysockets/baileys');
   const socketFn = mod.default?.default || mod.default || mod.makeWASocket || mod;
+  if (typeof socketFn !== 'function') {
+    console.error('[baileys] Could not resolve makeWASocket. Keys:', Object.keys(mod).join(', '));
+  }
   return {
     makeWASocket: socketFn,
     DisconnectReason: mod.DisconnectReason,
@@ -22,6 +25,7 @@ function loadBaileys() {
 let baileys;
 try {
   baileys = loadBaileys();
+  console.log('[baileys] Loaded @whiskeysockets/baileys successfully');
 } catch (e) {
   console.error('[baileys] Failed to load @whiskeysockets/baileys:', e.message);
 }
@@ -36,13 +40,13 @@ function generateSessionId() {
 }
 
 function getAuthDir(sessionId) {
-  const dir = path.join(process.cwd(), 'temp', sessionId);
+  const dir = path.join(process.cwd(), 'auth_sessions', sessionId);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
 
 function cleanupAuthDir(sessionId) {
-  const dir = path.join(process.cwd(), 'temp', sessionId);
+  const dir = path.join(process.cwd(), 'auth_sessions', sessionId);
   try {
     if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
   } catch (_) {}
@@ -52,8 +56,7 @@ function readCredentials(authDir) {
   try {
     const credsPath = path.join(authDir, 'creds.json');
     if (fs.existsSync(credsPath)) {
-      const data = fs.readFileSync(credsPath, 'utf-8');
-      return Buffer.from(data).toString('base64');
+      return Buffer.from(fs.readFileSync(credsPath, 'utf-8')).toString('base64');
     }
     return null;
   } catch (_) {
@@ -82,11 +85,87 @@ function getSessionStatus(sessionId) {
   };
 }
 
+async function sendWithRetry(sock, jid, message, retries = 3, delayMs = 2000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await sock.sendMessage(jid, message);
+    } catch (err) {
+      if (attempt === retries) throw err;
+      console.log(`[makamesco] Send attempt ${attempt} failed, retrying in ${delayMs}ms: ${err.message}`);
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+}
+
+async function performPostConnectionActions(session) {
+  const sock = session.socket;
+  if (!sock) return;
+
+  try {
+    // Give WA a moment to settle after open
+    await new Promise((r) => setTimeout(r, 3000));
+
+    // Deliver credentials to the user's own WhatsApp DM
+    try {
+      const creds = `MAKAMESCO:~${session.credentialsBase64}`;
+      let rawJid = sock.user?.id;
+
+      if (!rawJid) {
+        await new Promise((r) => setTimeout(r, 3000));
+        rawJid = sock.user?.id;
+      }
+
+      if (rawJid) {
+        const userNumber = rawJid.split(':')[0].split('@')[0];
+        const userJid = `${userNumber}@s.whatsapp.net`;
+
+        const sessionMsg = await sendWithRetry(sock, userJid, { text: creds.trim() }, 4, 3000);
+
+        await new Promise((r) => setTimeout(r, 2000));
+
+        const replyText = [
+          '╭⊷『 🤖 SESSION CREATED 』',
+          '│',
+          '├⊷ *Name:* MAKAMESCO',
+          '├⊷ *By:* Silent Wolf',
+          '├⊷ *Status:* ✅ Active',
+          '╰⊷ *Keep your session private* 🔐',
+        ].join('\n');
+
+        await sendWithRetry(sock, userJid, { text: replyText, quoted: sessionMsg }, 3, 2000);
+        notifyListeners(session, 'action', { type: 'credentials_sent' });
+      } else {
+        console.log('[makamesco] No user JID available — skipping DM delivery');
+        notifyListeners(session, 'action', { type: 'credentials_failed', error: 'No user JID' });
+      }
+    } catch (err) {
+      console.log('[makamesco] Failed to send credentials DM:', err.message);
+      notifyListeners(session, 'action', { type: 'credentials_failed', error: err.message });
+    }
+
+    // Disconnect and clean up after delivery
+    await new Promise((r) => setTimeout(r, 4000));
+    session.status = 'terminated';
+    notifyListeners(session, 'status', { status: 'terminated' });
+    try { sock.end(undefined); } catch (_) {}
+    cleanupAuthDir(session.sessionId);
+    activeSessions.delete(session.sessionId);
+  } catch (err) {
+    console.log('[makamesco] Post-connection actions error:', err.message);
+  }
+}
+
 async function connectSession(session, pairServer = 1) {
   if (session.status === 'terminated') return;
 
-  const { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion,
-    makeCacheableSignalKeyStore, Browsers, DisconnectReason } = baileys;
+  const {
+    makeWASocket,
+    useMultiFileAuthState,
+    fetchLatestBaileysVersion,
+    makeCacheableSignalKeyStore,
+    Browsers,
+    DisconnectReason,
+  } = baileys;
 
   const { state, saveCreds } = await useMultiFileAuthState(session.authDir);
 
@@ -122,6 +201,20 @@ async function connectSession(session, pairServer = 1) {
     keepAliveIntervalMs: 25000,
     markOnlineOnConnect: false,
     getMessage: async () => ({ conversation: '' }),
+    patchMessageBeforeSending: (msg) => {
+      const requiresPatch = !!(msg.buttonsMessage || msg.templateMessage || msg.listMessage);
+      if (requiresPatch) {
+        msg = {
+          viewOnceMessage: {
+            message: {
+              messageContextInfo: { deviceListMetadataVersion: 2, deviceListMetadata: {} },
+              ...msg,
+            },
+          },
+        };
+      }
+      return msg;
+    },
   });
 
   session.socket = sock;
@@ -130,7 +223,7 @@ async function connectSession(session, pairServer = 1) {
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
-    // Request pairing code when connecting
+    // ── Pairing code request ──────────────────────────────────────────────────
     if (session.connectionMethod === 'pairing' && !state.creds.registered && !pairingCodeRequested) {
       if (connection === 'connecting' || qr) {
         pairingCodeRequested = true;
@@ -145,6 +238,7 @@ async function connectSession(session, pairServer = 1) {
               session.pairingCode = code;
               notifyListeners(session, 'pairing_code', { code });
             } catch (err) {
+              console.log('[makamesco] Pairing code request failed:', err.message);
               pairingCodeRequested = false;
               if (session.status !== 'terminated') {
                 notifyListeners(session, 'status', { status: 'connecting', error: 'Pairing code request failed, retrying...' });
@@ -158,7 +252,7 @@ async function connectSession(session, pairServer = 1) {
       }
     }
 
-    // Generate QR code
+    // ── QR code ───────────────────────────────────────────────────────────────
     if (qr && session.connectionMethod === 'qr') {
       try {
         const qrDataUrl = await QRCode.toDataURL(qr, {
@@ -173,6 +267,7 @@ async function connectSession(session, pairServer = 1) {
       } catch (_) {}
     }
 
+    // ── Connection closed ─────────────────────────────────────────────────────
     if (connection === 'close') {
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const isLoggedOut = statusCode === DisconnectReason?.loggedOut;
@@ -196,7 +291,10 @@ async function connectSession(session, pairServer = 1) {
       if (session.retryCount < session.maxRetries) {
         session.retryCount++;
         const delay = Math.min(3000 * session.retryCount, 15000);
-        notifyListeners(session, 'status', { status: 'connecting', message: `Reconnecting (attempt ${session.retryCount})...` });
+        notifyListeners(session, 'status', {
+          status: 'connecting',
+          message: `Reconnecting (attempt ${session.retryCount})...`,
+        });
         setTimeout(async () => {
           if (session.status === 'terminated') return;
           try {
@@ -212,51 +310,26 @@ async function connectSession(session, pairServer = 1) {
       }
     }
 
+    // ── Connection open ───────────────────────────────────────────────────────
     if (connection === 'open') {
       session.status = 'connected';
       session.linkedAt = new Date().toISOString();
       session.retryCount = 0;
 
       await saveCreds();
-      await new Promise((r) => setTimeout(r, 1500));
+      await new Promise((r) => setTimeout(r, 1000));
 
       const creds = readCredentials(session.authDir);
       session.credentialsBase64 = creds || '';
 
-      // Show on web immediately
+      // Push credentials to the web UI immediately
       notifyListeners(session, 'status', {
         status: 'connected',
         credentialsBase64: session.credentialsBase64,
       });
 
-      // Also send to user's own WhatsApp DM
-      try {
-        const rawJid = sock.user?.id;
-        if (rawJid && session.credentialsBase64) {
-          const userNumber = rawJid.split(':')[0].split('@')[0];
-          const userJid = `${userNumber}@s.whatsapp.net`;
-
-          // Send the base64 session
-          const sessionMsg = await sock.sendMessage(userJid, { text: session.credentialsBase64 });
-
-          // Send a confirmation note quoted to it
-          await sock.sendMessage(userJid, {
-            text: `╔════════════════════\n║ ✅ MAKAMESCO SESSION\n║ 🔹 Type: Base64\n║ 🔹 Status: Active\n╚════════════════════`,
-          }, { quoted: sessionMsg });
-        }
-      } catch (e) {
-        console.log('[makamesco] Could not send session to WhatsApp DM:', e.message);
-      }
-
-      // Disconnect and clean up
-      setTimeout(async () => {
-        if (session.status === 'terminated') return;
-        session.status = 'terminated';
-        notifyListeners(session, 'status', { status: 'terminated' });
-        try { sock.end(undefined); } catch (_) {}
-        cleanupAuthDir(session.sessionId);
-        activeSessions.delete(session.sessionId);
-      }, 6000);
+      // Send DM + clean up (async — doesn't block the response)
+      performPostConnectionActions(session);
     }
   });
 
@@ -318,4 +391,10 @@ function removeSessionListener(sessionId, listener) {
   if (session) session.eventListeners = session.eventListeners.filter((l) => l !== listener);
 }
 
-module.exports = { createSession, getSessionStatus, terminateSession, addSessionListener, removeSessionListener };
+module.exports = {
+  createSession,
+  getSessionStatus,
+  terminateSession,
+  addSessionListener,
+  removeSessionListener,
+};
