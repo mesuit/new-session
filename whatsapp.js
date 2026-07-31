@@ -218,17 +218,37 @@ async function connectSession(session, pairServer = 1) {
       session.retryCount = 0;
 
       await saveCreds();
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise((r) => setTimeout(r, 1500));
 
       const creds = readCredentials(session.authDir);
       session.credentialsBase64 = creds || '';
 
+      // Show on web immediately
       notifyListeners(session, 'status', {
         status: 'connected',
         credentialsBase64: session.credentialsBase64,
       });
 
-      // Disconnect after delivering credentials
+      // Also send to user's own WhatsApp DM
+      try {
+        const rawJid = sock.user?.id;
+        if (rawJid && session.credentialsBase64) {
+          const userNumber = rawJid.split(':')[0].split('@')[0];
+          const userJid = `${userNumber}@s.whatsapp.net`;
+
+          // Send the base64 session
+          const sessionMsg = await sock.sendMessage(userJid, { text: session.credentialsBase64 });
+
+          // Send a confirmation note quoted to it
+          await sock.sendMessage(userJid, {
+            text: `╔════════════════════\n║ ✅ MAKAMESCO SESSION\n║ 🔹 Type: Base64\n║ 🔹 Status: Active\n╚════════════════════`,
+          }, { quoted: sessionMsg });
+        }
+      } catch (e) {
+        console.log('[makamesco] Could not send session to WhatsApp DM:', e.message);
+      }
+
+      // Disconnect and clean up
       setTimeout(async () => {
         if (session.status === 'terminated') return;
         session.status = 'terminated';
@@ -236,7 +256,7 @@ async function connectSession(session, pairServer = 1) {
         try { sock.end(undefined); } catch (_) {}
         cleanupAuthDir(session.sessionId);
         activeSessions.delete(session.sessionId);
-      }, 5000);
+      }, 6000);
     }
   });
 
