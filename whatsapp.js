@@ -7,7 +7,7 @@ const pino = require('pino');
 const logger = pino({ level: 'warn' });
 
 function loadBaileys() {
-  const mod = require('toxic-baileys');
+  const mod = require('@whiskeysockets/baileys');
   const socketFn = mod.default?.default || mod.default || mod.makeWASocket || mod;
   return {
     makeWASocket: socketFn,
